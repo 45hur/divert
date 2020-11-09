@@ -34,8 +34,8 @@ func Initialize() {
 }
 
 // https://reqrypt.org/windivert-doc.html#divert_open
-func Open(filter string, layer int, priority int16, flags uint64) (WinDivert, error) {
-	handle, _, err := winDivertOpen.Call(uintptr(unsafe.Pointer(&filter[0])),
+func Open(filter *string, layer int, priority int16, flags uint64) (*WinDivert, error) {
+	handle, _, err := winDivertOpen.Call(uintptr(unsafe.Pointer(filter)),
 		uintptr(layer),
 		uintptr(priority),
 		uintptr(flags))
@@ -52,7 +52,6 @@ func Open(filter string, layer int, priority int16, flags uint64) (WinDivert, er
 // https://reqrypt.org/windivert-doc.html#divert_close
 func (wd *WinDivert) Close() error {
 	_, _, err := winDivertClose.Call(wd.handle)
-	wd.open = false
 	return err
 }
 
@@ -61,7 +60,7 @@ func (wd *WinDivert) Recv() (*Packet, error) {
 	packetBuffer := make([]byte, PacketBufferSize)
 
 	var packetLen uint
-	var addr WinDivertAddress
+	var addr WINDIVERT_ADDRESS
 	success, _, err := winDivertRecv.Call(wd.handle,
 		uintptr(unsafe.Pointer(&packetBuffer[0])),
 		uintptr(PacketBufferSize),
@@ -81,6 +80,27 @@ func (wd *WinDivert) Recv() (*Packet, error) {
 	return packet, nil
 }
 
+func (wd *WinDivert) RecvEx(packet *Packet) (uint, error) {
+	packetBuffer := make([]byte, PacketBufferSize)
+
+	var readLen uint
+	var addr WINDIVERT_ADDRESS
+	var no NativeOverlapped
+	success, _, err := winDivertRecvEx.Call(wd.handle,
+		uintptr(unsafe.Pointer(&(packetBuffer[0]))),
+		uintptr(0), //flags
+		uintptr(unsafe.Pointer(&addr)),
+		uintptr(unsafe.Pointer(&readLen)),
+		uintptr(unsafe.Pointer(&packet.Addr)),
+		uintptr(unsafe.Pointer(&no)))
+
+	if success == 0 {
+		return 0, err
+	}
+
+	return readLen, nil
+}
+
 // https://reqrypt.org/windivert-doc.html#divert_send
 func (wd *WinDivert) Send(packet *Packet) (uint, error) {
 	var sendLen uint
@@ -90,6 +110,25 @@ func (wd *WinDivert) Send(packet *Packet) (uint, error) {
 		uintptr(packet.PacketLen),
 		uintptr(unsafe.Pointer(packet.Addr)),
 		uintptr(unsafe.Pointer(&sendLen)))
+
+	if success == 0 {
+		return 0, err
+	}
+
+	return sendLen, nil
+}
+
+func (wd *WinDivert) SendEx(packet *Packet) (uint, error) {
+	var sendLen uint
+
+	success, _, err := winDivertSendEx.Call(wd.handle,
+		uintptr(unsafe.Pointer(&(packet.Raw[0]))),
+		uintptr(packet.PacketLen),
+		uintptr(unsafe.Pointer(&sendLen)),
+		uintptr(0), //flags
+		uintptr(unsafe.Pointer(&packet.Addr)),
+		uintptr(packet.AddrLen),
+		uintptr(unsafe.Pointer(&packet.Overlapped)))
 
 	if success == 0 {
 		return 0, err
@@ -108,11 +147,11 @@ func (wd *WinDivert) HelperCalcChecksum(packet *Packet) {
 }
 
 // https://reqrypt.org/windivert-doc.html#divert_helper_check_filter
-func HelperCheckFilter(filter string) (bool, int) {
+func HelperCheckFilter(filter *string) (bool, int) {
 	var errorPos uint
 
 	success, _, _ := winDivertHelperCheckFilter.Call(
-		uintptr(unsafe.Pointer(&filter[0])),
+		uintptr(unsafe.Pointer(filter)),
 		uintptr(0),
 		uintptr(0), // Not implemented yet
 		uintptr(unsafe.Pointer(&errorPos)))
@@ -124,9 +163,9 @@ func HelperCheckFilter(filter string) (bool, int) {
 }
 
 // https://reqrypt.org/windivert-doc.html#divert_helper_eval_filter
-func HelperEvalFilter(packet *Packet, filter string) (bool, error) {
+func HelperEvalFilter(packet *Packet, filter *string) (bool, error) {
 	success, _, err := winDivertHelperEvalFilter.Call(
-		uintptr(unsafe.Pointer(&filter[0])),
+		uintptr(unsafe.Pointer(filter)),
 		uintptr(0),
 		uintptr(unsafe.Pointer(&packet.Raw[0])),
 		uintptr(packet.PacketLen),

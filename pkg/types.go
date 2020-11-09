@@ -71,7 +71,21 @@ type WinDivert struct {
 }
 
 type Packet struct {
-	Raw       []byte
-	Addr      *WINDIVERT_ADDRESS
-	PacketLen uint
+	Raw        []byte
+	Addr       *WINDIVERT_ADDRESS
+	PacketLen  uint
+	AddrLen    uint
+	Overlapped *NativeOverlapped
 }
+
+type NativeOverlapped struct {
+	InternalLow  uintptr
+	InternalHigh uintptr
+	OffsetLow    int
+	OffsetHigh   int
+	EventHandle  uintptr
+}
+
+const (
+	PacketBufferSize = 1600
+)

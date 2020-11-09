@@ -1,3 +1,3 @@
-module github.com/Elctro/godivert2
+module github.com/Elctro/divert
 
 go 1.15
